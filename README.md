@@ -1,2 +1,7 @@
 # SEM-Lab7
-Lab7 Ten Growth Models - University of California, Santa Barbara - Structural Equation Modeling, ED216F - Adam Garber
+
+Ten Growth Models - University of California, Santa Barbara - Structural Equation Modeling, ED216F - Adam Garber
+
+handout here - https://garberadamc.github.io/project-site/Lab7-ten-growth-models
+
+more materials here - https://garberadamc.github.io/project-site/
