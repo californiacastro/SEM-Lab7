@@ -1,0 +1,832 @@
+
+---
+title: "Lab 7 - Ten Growth Models - Simple to Advanced"
+author: "Adam Garber"
+subtitle: 'Structural Equation Modeling - Instructor: Karen Nylund-Gibson'
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output: 
+  prettydoc::html_pretty:
+    theme: architect
+    highlight: github
+    toc: yes
+params:
+  data: "lsay_lab7_data.csv"
+  ind1: sci_07 
+  ind2: sci_08
+  ind3: sci_09
+  ind4: sci_10
+  ind5: sci_11
+  ind6: sci_12
+  covti1: gender
+  covti2: rural
+  covti3: fathed
+  covti4: mothed
+  covtv1: math_07
+  covtv2: math_08
+  covtv3: math_09
+  covtv4: math_10
+  covtv5: math_11
+  covtv6: math_12
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, tidy = TRUE)
+library(prettydoc)
+```
+
+`University of California, Santa Barbara`
+
+______________________________________________
+
+# Lab preparation
+
+______________________________________________
+
+## Creating a version-controlled R-Project with Github
+
+Download repository here: https://github.com/garberadamc/SEM-Lab7
+
+On the Github repository webpage:
+
+a. `fork` your own `branch` of the lab repository 
+b. copy the repository web URL address from the `clone or download` menu
+
+Within R-Studio:
+
+c. click "NEW PROJECT" 
+d. choose option `Version Control`
+e. choose option `Git`
+f. paste the repository web URL path copied from the `clone or download` menu on Github page
+g. choose location of the R-Project (too many nested folders will result in filepath error)
+
+______________________________________________
+
+## Data sources:
+
+The first 3 models utilize a public use data subset the *Longitudinal Survey of American Youth (LSAY)*  [$\color{blue}{\text{See documentation here}}$](https://www.lsay.org/)
+
+______________________________________________
+
+Load packages
+```{r, eval=TRUE}
+library(glue)
+library(transformr)
+library(gganimate)
+library(hrbrthemes)
+library(tidyverse)
+library(haven)
+library(janitor)
+library(MplusAutomation)
+library(rhdf5)
+library(here)
+library(kableExtra)
+library(gtsummary)
+library(semPlot)
+library(naniar)
+```
+
+______________________________________________
+
+## `LSAY` data example - `Math Scores` across 6 timepoints
+
+______________________________________________
+
+Read in data 
+```{r, eval=FALSE}
+
+lsay_data <- read_spss(here("data", "LSAY_labs.sav")) %>% 
+  select(RURAL, GENDER, FATHED, MOTHED,
+        -starts_with("AB"),
+          ends_with("IMP"),
+          -contains("BIO"),
+          -contains("PHY")) %>% 
+  clean_names() %>% 
+  rename( math_07 = amthimp ,
+          math_08 = cmthimp ,
+          math_09 = emthimp ,
+          math_10 = gmthimp ,
+          math_11 = imthimp ,
+          math_12 = kmthimp ,
+           sci_07 = asciimp ,
+           sci_08 = csciimp ,
+           sci_09 = esciimp ,
+           sci_10 = gsciimp ,
+           sci_11 = isciimp ,
+           sci_12 = ksciimp ) %>% 
+  replace_with_na_all(condition = ~.x == 9999.00)
+
+```
+
+______________________________________________
+
+View metadeta 
+```{r, eval=FALSE}
+sjPlot::view_df(lsay_data)
+```
+
+Write a `CSV` file
+```{r, eval=FALSE}
+write_csv(lsay_data, here("data", "lsay_lab7_data.csv"))
+```
+
+Read in the `CSV` file (SPSS labels removed)
+```{r}
+lsay_lab7 <- read_csv(here("data", params$data))
+```
+
+______________________________________________
+
+# Let's start modeling - 10 growth models building in complexity
+
+______________________________________________
+
+Table. LSAY repeated measures 
+```{r, eval=TRUE, echo=FALSE, results='asis'}
+
+var_table <- tribble(
+   ~"Name",      ~"Labels",  ~"Variable type",                                   
+ #--------------|--------------------------------|-----|,
+  "math_07"   , "7th grade math score  "   , "time varying covariate",
+  "math_08"   , "8th grade math score  "   , "     ",
+  "math_09"   , "9th grade math score  "   , "     ",
+  "math_10"   , "10th grade math score "   , "     ",
+  "math_11"   , "11th grade math score "   , "     ",
+  "math_12"   , "12th grade math score "   , "     ",
+  "         " , "                      "   , "     ",
+  "sci_07"   , "7th grade science score  " , "model indicators (outcomes)",
+  "sci_08"   , "8th grade science score  " , "     ",
+  "sci_09"   , "9th grade science score  " , "     ",
+  "sci_10"   , "10th grade science score " , "     ",
+  "sci_11"   , "11th grade science score " , "     ",
+  "sci_12"   , "12th grade science score " , "     ")
+
+var_table %>% 
+  kable(booktabs = T, linesep = "") %>% 
+  kable_styling(latex_options = c("striped"), 
+                full_width = F,
+                position = "left")
+```
+
+______________________________________________
+
+## Model 01 -  `Fixed time effects` (equal intervals)
+
+______________________________________________
+
+```{r, echo=FALSE, eval=TRUE, out.width = "80%", out.height= "80%", fig.pos="h"}
+
+knitr::include_graphics(here("figures", "m1_growth_lab7.png"))
+```
+
+```{r, eval=TRUE}
+
+m1_growth  <- mplusObject(
+  TITLE = "m01_fixed_time_scores", 
+  VARIABLE = glue(
+    "usevar =
+     {params$ind1} {params$ind2} {params$ind3} {params$ind4}
+     {params$ind5} {params$ind6}; "), 
+
+  ANALYSIS = 
+    "estimator = MLR" ,
+  
+  MODEL = glue(
+    "i s | {params$ind1}@0 {params$ind2}@1 {params$ind3}@2 {params$ind4}@3
+           {params$ind5}@4 {params$ind6}@5; " ),
+  
+  OUTPUT = "sampstat standardized;",
+  
+  PLOT = glue(
+    "type=plot3;
+     series = 
+     {params$ind1} {params$ind2} {params$ind3}
+     {params$ind4} {params$ind5} {params$ind6}(*);"),
+  
+  usevariables = colnames(lsay_lab7),   
+  rdata = lsay_lab7)                    
+
+m1_growth_fit <- mplusModeler(m1_growth,
+                     dataout=here("mplus_files", "Lab7.dat"),       
+                     modelout=here("mplus_files", "m1_growth_Lab7.inp"),
+                     check=TRUE, run = TRUE, hashfilename = FALSE)
+```
+
+______________________________________________
+
+
+______________________________________________
+
+Load in the `mplus.R` functions
+```{r}
+source(here("mplus.R.txt"))
+```
+
+Plotting using `gh5` plot data generated by `Mplus`
+
+1. View plots available for a given model 
+2. Generate plots using the `get.plot.___` function
+3. Extract data and transform to tidy format
+4. Plot with `ggplot`
+
+```{r, eval=FALSE}
+mplus.view.plots(here("mplus_files", "m1_growth_Lab6.gh5"))
+```
+
+Prepare plot data
+```{r}
+
+observed <- lsay_lab7 %>% select(starts_with("sci")) %>%
+  rownames_to_column() %>% drop_na()
+
+obs100 <- observed[1:100,]
+
+plot_obs <- obs100 %>% 
+  pivot_longer(params$ind1:params$ind6, # The columns I'm gathering together
+              names_to = "grade", # new column name for existing names
+             values_to = "value") # new column name to store values
+
+gradelevels <- colnames(observed[,2:7])
+
+mean_est <- as.data.frame(mplus.get.estimated_means(here("mplus_files", "m1_growth_Lab7.gh5"))) %>%
+  mutate(grade = gradelevels)
+
+```
+
+Plot the model estimated means superimposted on the obserbed individual values 
+```{r}
+
+growth_plot <- ggplot() +                                                                   
+  geom_point(data = plot_obs, aes(x = grade, y = value, group = rowname), alpha = .3) +     #   
+  geom_line(data = plot_obs, aes(x = grade, y = value, group = rowname), alpha = .3) +      #   
+  geom_point(data=mean_est, aes(x=grade, y = V1), color = "Blue", size = 1.5) +             #    
+  geom_line(data=mean_est, aes(x=grade, y = V1, group = 1), color = "Blue", size = 1.2) +   #        
+  scale_x_discrete(labels = c("7", "8", "9", "10", "11", "12")) +                           #  
+  labs(x="Grade", y="Science Score") +                                                      #     
+  theme_minimal()                                                                              
+
+growth_plot
+```
+
+```{r, eval=FALSE}
+ggsave(here("figures", "spaghetti_p1.png"), height = 6, width = 8, dpi = "retina")
+```
+
+Animate the plot with {`gganimate`}
+```{r}
+
+growth_plot + transition_states(rowname, transition_length = 1, state_length = 1) +          #
+  shadow_mark(color = "Magenta", alpha = .3)                                                 # 
+```
+
+```{r, eval=FALSE}
+anim_save(here("figures", "spaghetti_plot.gif"), height = 6, width = 8, dpi = "retina")
+```
+
+______________________________________________
+
+## Model 02 -  `Centering the Intercept` (choose which time score is `0`)
+
+______________________________________________
+
+a. Centering determines the interpretation of the intercept growth factor
+b. The centering point is the timepoint at which the time score is zero
+c. A model can be estimated for different centering points depending
+on which interpretation is of interest
+
+```{r, eval=FALSE}
+
+m2_growth  <- mplusObject(
+  TITLE = "m02_centering_time_scores", 
+  VARIABLE = glue(
+    "usevar =
+    {params$ind1}-{params$ind6}; "), 
+
+  ANALYSIS = 
+    "estimator = MLR" ,
+  
+  MODEL = glue(
+   "i s | {params$ind1}@-2 {params$ind2}@-1 {params$ind3}@0
+          {params$ind4}@1 {params$ind5}@2 {params$ind6}@3; " ),
+  
+  OUTPUT = "sampstat standardized;",
+  
+  PLOT = glue("type=plot3;
+          series = {params$ind1}-{params$ind6}(*)"),
+  
+  usevariables = colnames(lsay_lab7),   
+  rdata = lsay_lab7)                    
+
+m2_growth_fit <- mplusModeler(m2_growth,
+                     dataout=here("mplus_files", "Lab7.dat"),       
+                     modelout=here("mplus_files", "m2_growth_Lab7.inp"),
+                     check=TRUE, run = TRUE, hashfilename = FALSE)
+```
+
+______________________________________________
+
+## Model 03 - `freely estimated time scores` (level-shape model)
+
+______________________________________________
+
+```{r, echo=FALSE, eval=TRUE, out.width = "80%", out.height= "80%", fig.pos="h"}
+
+knitr::include_graphics(here("figures", "m3_free_time_L7.png"))
+```
+
+```{r, eval=FALSE}
+
+m3_growth  <- mplusObject(
+  TITLE = "m03_free_time_scores", 
+  VARIABLE = glue(
+    "usevar =
+     {params$ind1}-{params$ind6}; "), 
+
+  ANALYSIS = 
+    "estimator = MLR" ,
+  
+  MODEL = glue(
+   "i s | {params$ind1}@0 {params$ind2}* {params$ind3}*
+          {params$ind4}* {params$ind5}* {params$ind6}@1; " ),
+  
+  OUTPUT = "sampstat standardized;",
+  
+  PLOT = glue("type=plot3;
+          series = {params$ind1}-{params$ind6}(*)"),
+  
+  usevariables = colnames(lsay_lab7),   
+  rdata = lsay_lab7)                    
+
+m3_growth_fit <- mplusModeler(m3_growth,
+                     dataout=here("mplus_files", "Lab7.dat"),       
+                     modelout=here("mplus_files", "m3_growth_Lab7.inp"),
+                     check=TRUE, run = TRUE, hashfilename = FALSE)
+```
+
+______________________________________________
+
+Prepare plot data
+```{r}
+
+mean_est2 <- as.data.frame(mplus.get.estimated_means(here("mplus_files", "m3_growth_Lab7.gh5"))) %>%
+  mutate(grade = gradelevels)
+
+```
+
+Plot the model estimated means superimposted on the obserbed individual values 
+```{r}
+
+growth_plot <- ggplot() +                                                                                       
+  geom_point(data = plot_obs, aes(x = grade, y = value, group = rowname), color = "lightblue", alpha = .3) +    #  
+  geom_line(data = plot_obs, aes(x = grade, y = value, group = rowname), color = "lightblue", alpha = .3) +     #   
+  geom_point(data=mean_est2, aes(x=grade, y = V1), color = "magenta", size = 1.5) +                             # 
+  geom_line(data=mean_est2, aes(x=grade, y = V1, group = 1), color = "magenta", size = 1.2) +                   #
+  scale_x_discrete(labels = c("7", "8", "9", "10", "11", "12")) +                                               #  
+  labs(x="Grade", y="Science Score") +                                                                          #
+  theme_minimal()                                                                                               # 
+ 
+growth_plot
+```
+
+______________________________________________
+
+## Model 04 - `time-invariant covariates` and `freely estimated time scores` 
+
+______________________________________________
+
+covariates:
+
+- gender: 1 = female
+- rural:  1 = rural
+- fathed: Father's reported education
+- mothed: Mother's reported education
+
+```{r, eval=FALSE}
+
+m4_growth  <- mplusObject(
+  TITLE = "m04_time-inv_covs", 
+  VARIABLE = glue(
+    "usevar =
+     {params$ind1}-{params$ind6}
+     {params$covti1} {params$covti2} {params$covti3} {params$covti4}; "), 
+
+  ANALYSIS = 
+    "estimator = MLR" ,
+  
+  MODEL = glue(
+   "i s | {params$ind1}@0 {params$ind2}* {params$ind3}* {params$ind4}*
+          {params$ind5}* {params$ind6}@1; 
+          
+    i s on {params$covti1} {params$covti2} {params$covti3} {params$covti4};" ),
+  
+  OUTPUT = "sampstat standardized;",
+  
+  PLOT = glue("type=plot3;
+          series = {params$ind1}-{params$ind6}(*)"),
+  
+  usevariables = colnames(lsay_lab7),   
+  rdata = lsay_lab7)                    
+
+m4_growth_fit <- mplusModeler(m4_growth,
+                     dataout=here("mplus_files", "Lab7.dat"),       
+                     modelout=here("mplus_files", "m4_growth_Lab7.inp"),
+                     check=TRUE, run = TRUE, hashfilename = FALSE)
+```
+
+______________________________________________
+
+Check the path diagram of the model with {`semPlot`}
+```{r}
+
+m4_output <- readModels(here("mplus_files", "m4_growth_Lab7.out"))
+
+semPaths(m4_output,  "est",
+         intercepts=FALSE, residuals = FALSE, fade = FALSE,
+         edge.color = "black", edgeLabels = "")
+
+```
+
+______________________________________________
+
+## Model 05 - `time-varying covariates` 
+
+______________________________________________
+
+repeated measure covariate: `math scores: grades 7 to 12`
+time-invariant covariate: `mothed`
+
+```{r, eval=FALSE}
+
+m5_growth  <- mplusObject(
+  TITLE = "m05_time-varying_covs", 
+  VARIABLE = glue(
+    "usevar =
+     {params$ind1}-{params$ind6}
+     {params$covtv1}-{params$covtv6} {params$covti4}; )",
+
+  ANALYSIS = 
+    "estimator = MLR" ,
+  
+  MODEL = glue(
+   "i s | {params$ind1}@0 {params$ind2}* {params$ind3}* {params$ind4}*
+          {params$ind5}* {params$ind6}@1; 
+    i s on {params$covti4};
+    {params$ind1} on {params$covtv1};
+    {params$ind2} on {params$covtv2};
+    {params$ind3} on {params$covtv3};
+    {params$ind4} on {params$covtv4};
+    {params$ind5} on {params$covtv5};
+    {params$ind6} on {params$covtv6}; "),
+  
+  OUTPUT = "sampstat standardized;",
+  
+  PLOT = glue("type=plot3;
+          series = {params$ind1}-{params$ind6}(*)"),
+  
+  usevariables = colnames(lsay_lab7),   
+  rdata = lsay_lab7)                    
+
+m5_growth_fit <- mplusModeler(m5_growth,
+                     dataout=here("mplus_files", "Lab7.dat"),       
+                     modelout=here("mplus_files", "m5_growth_Lab7.inp"),
+                     check=TRUE, run = TRUE, hashfilename = FALSE)
+```
+
+______________________________________________
+
+## Model 06 - `Time-varying covariate with time-invariant effect`
+
+______________________________________________
+
+```{r, eval=FALSE}
+
+m6_growth  <- mplusObject(
+  TITLE = "m06_time-varying_covs", 
+  VARIABLE = glue(
+    "usevar =
+     {params$ind1}-{params$ind6}
+     {params$covtv1}-{params$covtv6} {params$covti4}; "),
+
+  ANALYSIS = 
+    "estimator = MLR" ,
+  
+  MODEL = glue(
+   "i s | {params$ind1}@0 {params$ind2}* {params$ind3}* {params$ind4}*
+          {params$ind5}* {params$ind6}@1; 
+    i s on {params$covti4};
+    {params$ind1} on {params$covtv1}(1); ! TIME-INVARIANT: Fixed to equality
+    {params$ind2} on {params$covtv2}(1);
+    {params$ind3} on {params$covtv3}(1);
+    {params$ind4} on {params$covtv4}(1);
+    {params$ind5} on {params$covtv5}(1);
+    {params$ind6} on {params$covtv6}(1); "),
+  
+  OUTPUT = "sampstat standardized;",
+  
+  PLOT = glue("type=plot3;
+          series = {params$ind1}-{params$ind6}(*)"),
+  
+  usevariables = colnames(lsay_lab7),   
+  rdata = lsay_lab7)                    
+
+m6_growth_fit <- mplusModeler(m6_growth,
+                     dataout=here("mplus_files", "Lab7.dat"),       
+                     modelout=here("mplus_files", "m6_growth_Lab7.inp"),
+                     check=TRUE, run = TRUE, hashfilename = FALSE)
+```
+
+______________________________________________
+
+## Model 07 - `Quadratic Growth`
+
+______________________________________________
+
+```{r, echo=FALSE, eval=TRUE, out.width = "80%", out.height= "80%", fig.pos="h"}
+
+knitr::include_graphics(here("figures", "m7_quad_growth_L7.png"))
+```
+
+```{r, eval=FALSE}
+
+m7_growth  <- mplusObject(
+  TITLE = "m07_quadratic", 
+  VARIABLE = glue(
+    "usevar = 
+     {params$ind1}-{params$ind6}
+     {params$covtv1}-{params$covtv6}; "),
+
+  ANALYSIS = 
+    "estimator = MLR" ,
+  
+  MODEL = glue(
+   "i s q | {params$ind1}@0 {params$ind2}@1 {params$ind3}@2 {params$ind4}@3
+            {params$ind5}@4 {params$ind6}@5; "),
+  
+  OUTPUT = "sampstat standardized;",
+  
+  PLOT = glue("type=plot3;
+          series = {params$ind1}-{params$ind6}(*)"),
+  
+  usevariables = colnames(lsay_lab7),   
+  rdata = lsay_lab7)                    
+
+m7_growth_fit <- mplusModeler(m7_growth,
+                     dataout=here("mplus_files", "Lab7.dat"),       
+                     modelout=here("mplus_files", "m7_growth_Lab7.inp"),
+                     check=TRUE, run = TRUE, hashfilename = FALSE)
+```
+
+______________________________________________
+
+## Model 08 - `Parallel Process Growth Model`
+
+______________________________________________
+
+```{r, echo=FALSE, eval=TRUE, out.width = "80%", out.height= "80%", fig.pos="h"}
+
+knitr::include_graphics(here("figures", "m8_parallel_process_L7.png"))
+```
+
+```{r, eval=FALSE}
+
+m8_growth  <- mplusObject(
+  TITLE = "m08_parallel_process", 
+  VARIABLE = glue(
+    "usevar =
+     {params$ind1}-{params$ind6}
+     {params$covtv1}-{params$covtv6} {params$covti4};"),
+
+  ANALYSIS = 
+    "estimator = MLR" ,
+  
+  MODEL = glue(
+   "is ss | {params$ind1}@0 {params$ind2}@1 {params$ind3}@2 {params$ind4}@3
+            {params$ind5}@4 {params$ind6}@5; 
+            
+    im sm | {params$covtv1}@0 {params$covtv2}@1 {params$covtv3}@2 {params$covtv4}@3
+            {params$covtv5}@4 {params$covtv6}@5; 
+    
+    is ss im sm on {params$covti4};  ! time-invariant covariate ",
+  
+  OUTPUT = "sampstat standardized;"),
+  
+  PLOT = glue("type=plot3;
+          series = {params$ind1}-{params$ind6}(*)"),
+  
+  usevariables = colnames(lsay_lab7),   
+  rdata = lsay_lab7)                    
+
+m8_growth_fit <- mplusModeler(m8_growth,
+                     dataout=here("mplus_files", "Lab7.dat"),       
+                     modelout=here("mplus_files", "m8_growth_Lab7.inp"),
+                     check=TRUE, run = TRUE, hashfilename = FALSE)
+```
+
+______________________________________________
+
+## Model 09 - `Parallel Process Growth Model`
+
+______________________________________________
+
+```{r, echo=FALSE, eval=TRUE, out.width = "80%", out.height= "80%", fig.pos="h"}
+
+knitr::include_graphics(here("figures", "m9_piecewise_L7.png"))
+```
+
+```{r, eval=FALSE}
+
+m9_growth  <- mplusObject(
+  TITLE = "m09_piecewise_1int_2slopes", 
+  VARIABLE = glue(
+    "usevar =
+     {params$ind1}-{params$ind6}
+     {params$covtv1}-{params$covtv6} {params$covti4};"),
+
+  ANALYSIS = 
+    "estimator = MLR" ,
+  
+  MODEL = glue(
+   "is ss | {params$ind1}@0 {params$ind2}@1 {params$ind3}@2 {params$ind4}@3
+    {params$ind5}@4 {params$ind6}@5; 
+   
+    im sm | {params$covtv1}@0 {params$covtv2}@1 {params$covtv3}@2 {params$covtv4}@3
+    {params$covtv5}@4 {params$covtv6}@5; 
+    
+    is ss im sm on {params$covti4};  ! time-invariant covariate "),
+  
+  OUTPUT = "sampstat standardized;",
+  
+  PLOT = glue("type=plot3;
+          series = {params$ind1}-{params$ind6}(*)"),
+  
+  usevariables = colnames(lsay_lab7),   
+  rdata = lsay_lab7)                    
+
+m9_growth_fit <- mplusModeler(m9_growth,
+                     dataout=here("mplus_files", "Lab7.dat"),       
+                     modelout=here("mplus_files", "m8_growth_Lab7.inp"),
+                     check=TRUE, run = TRUE, hashfilename = FALSE)
+```
+
+Prepare plot data
+```{r}
+
+mean_est3 <- as.data.frame(mplus.get.estimated_means(here(
+  "mplus_files", "m9_growth_Lab7.gh5"))) %>%
+  mutate(grade = gradelevels)
+
+```
+  
+Plot the model estimated means superimposted on the obserbed individual values 
+```{r}
+
+growth_plot <- ggplot() +                                                                   #         
+  geom_point(data = plot_obs,                                                               #
+             aes(x = grade, y = value, group = rowname), alpha = .3) +                      #   
+  geom_line(data = plot_obs,                                                                #
+            aes(x = grade, y = value, group = rowname), alpha = .3) +                       #   
+  geom_point(data=mean_est3,                                                                #
+             aes(x=grade, y = V1), color = "Blue", size = 1.5) +                            #    
+  geom_line(data=mean_est3,                                                                 #
+            aes(x=grade, y = V1, group = 1), color = "Blue", size = 1.2) + 
+  geom_vline(xintercept=3, linetype="dashed", color = "red") + 
+  annotate("text", x = 2, y = 95, label = "Middle School", color="red") +
+  annotate("text", x = 4.5, y = 95, label = "High School", color="red") +
+  scale_x_discrete(labels = c("7", "8", "9", "10", "11", "12")) +                           #  
+  labs(title= "Piecewise Growth Model", x="Grade", y="Science Score") +                      #     
+  theme_ipsum()                                                                             
+
+growth_plot 
+```
+
+______________________________________________
+
+## Model 10 - `Parallel Process Growth Model`
+
+______________________________________________
+
+```{r, eval=FALSE}
+
+m10_growth  <- mplusObject(
+  TITLE = "m10_piecewise_1int_2slopes", 
+  VARIABLE = glue(
+    "usevar =
+     {params$ind1}-{params$ind6} {params$covti4};"),
+
+  ANALYSIS = 
+    "estimator = MLR" ,
+  
+  MODEL = glue(
+   "i1 s1 | {params$ind1}@0 {params$ind2}@1 {params$ind3}@2
+            {params$ind4}@2 {params$ind5}@2 {params$ind6}@2; 
+      
+   s2 by {params$ind1}@0 {params$ind2}@0 {params$ind3}@0
+         {params$ind4}@1 {params$ind5}@2 {params$ind6}@3; 
+    
+    i1 s1 s2 on {params$covti4}; "),
+  
+  OUTPUT = "sampstat standardized;",
+  
+  PLOT = glue("type=plot3;
+          series = {params$ind1}-{params$ind6}(*)"),
+  
+  usevariables = colnames(lsay_lab7),   
+  rdata = lsay_lab7)                    
+
+m10_growth_fit <- mplusModeler(m10_growth,
+                     dataout=here("mplus_files", "Lab7.dat"),       
+                     modelout=here("mplus_files", "m10_growth_Lab7.inp"),
+                     check=TRUE, run = TRUE, hashfilename = FALSE)
+```
+
+Check the path diagram 
+```{r}
+
+m10_output <- readModels(here("mplus_files", "m10_growth_Lab7.out"))
+
+semPaths(m10_output,  "est",
+         intercepts=FALSE, residuals = FALSE, fade = FALSE,
+         edge.color = "black", edgeLabels = "")
+
+```
+
+Compare model fit across 10 models
+```{r}
+
+all_models <- readModels(here("mplus_files"))
+
+summary_fit <- LatexSummaryTable(all_models,
+                                 keepCols=c("Title", "Parameters","ChiSqM_Value", "CFI","TLI",
+                                            "SRMR", "RMSEA_Estimate", "RMSEA_90CI_LB", "RMSEA_90CI_UB"),
+                                 sortBy = "Title")
+
+```
+
+# Model fit summary
+
+ Make a table with `gt::gt()`
+```{r}
+
+library(gt)
+
+fit_table <- summary_fit %>% 
+  gt() %>% 
+  tab_header(
+    title = "Fit Indices",  # Add a title
+    subtitle = ""           # And a subtitle
+  ) %>%
+  tab_options(
+    table.width = pct(80)
+  ) %>%
+  tab_footnote(
+    footnote = "Longitudinal Survey American Youth (LSAY)",
+    location = cells_title())
+
+fit_table
+```
+
+
+______________________________________________
+
+# References
+
+Hallquist, M. N., & Wiley, J. F. (2018). MplusAutomation: An R Package for Facilitating Large-Scale Latent Variable Analyses in Mplus. Structural equation modeling: a multidisciplinary journal, 25(4), 621-638.
+
+Miller, J. D., Hoffer, T., Suchner, R., Brown, K., & Nelson, C. (1992). LSAY codebook. Northern Illinois University.
+
+Muthén, B. O., Muthén, L. K., & Asparouhov, T. (2017). Regression and mediation analysis using Mplus. Los Angeles, CA: Muthén & Muthén.
+
+Muthén, L.K. and Muthén, B.O. (1998-2017).  Mplus User’s Guide.  Eighth Edition. Los Angeles, CA: Muthén & Muthén
+
+R Core Team (2017). R: A language and environment for statistical computing. R Foundation for Statistical Computing, Vienna, Austria. URL http://www.R-project.org/
+
+Wickham et al., (2019). Welcome to the tidyverse. Journal of Open Source Software, 4(43), 1686, https://doi.org/10.21105/joss.01686
+
+---------------------------------------------------
+
+![](figures/UCSB_Navy_mark.png){ width=75% }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
