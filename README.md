@@ -4,4 +4,4 @@ Ten Growth Models - University of California, Santa Barbara - Structural Equatio
 
 handout here - https://garberadamc.github.io/project-site/Lab7-ten-growth-models
 
-more materials here - https://garberadamc.github.io/project-site/
+course materials here - https://garberadamc.github.io/project-site/
