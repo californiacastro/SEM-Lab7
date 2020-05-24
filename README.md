@@ -7,4 +7,4 @@ handout here - https://garberadamc.github.io/project-site/Lab7-ten-growth-models
 course materials here - https://garberadamc.github.io/project-site/
 
 
-![](figures/hex_zoom.6_github.png)
+![](figures/tidy_workflow_hex.png)
